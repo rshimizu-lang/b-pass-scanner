@@ -150,12 +150,8 @@
   </div>
 
   <script>
-    // ============================================================
-    // ★ GAS デプロイURL（clasp deploy 後に発行されるURLを貼り付けてください）
-    // ============================================================
-    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzfWKYfTuvxvst-nlrQpzm7s6-QGwXBuLEpB12nx2wtSQZe4F_49zn3P2WtmYlxgCi4Cg/exec';
-    // 例: 'https://script.google.com/macros/s/AKfycbxXXXXXXXXX/exec'
-    // ============================================================
+    // URLパラメータ ?api= から GAS デプロイURLを取得
+    const GAS_API_URL = new URLSearchParams(location.search).get('api') || '';
 
     let db = { date: "", list: [] };
     let checkedIds = [];
@@ -170,8 +166,8 @@
     let streamPtr = null;
 
     window.onload = function() {
-      if (GAS_API_URL === 'YOUR_GAS_DEPLOY_URL_HERE') {
-        alert('⚠️ GAS_API_URL が未設定です。\nindex.html の GAS_API_URL を設定してください。');
+      if (!GAS_API_URL) {
+        alert('⚠️ URLに ?api= パラメータがありません。\n担当者から受け取ったURLを使用してください。');
       }
       if (localStorage.getItem("bpass_db")) {
         document.getElementById("offline-resume").style.display = "block";
