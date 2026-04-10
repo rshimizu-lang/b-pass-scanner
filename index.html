@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>B-PASS Smart Check-in</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    :root {
+      --navy: #1a2c4e;
+      --gold: #d4af37;
+      --green: #06C755;
+      --orange: #FF9900;
+      --red: #e63946;
+      --bg: #f0f2f5;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: #333; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    .header { background: var(--navy); padding: 14px 16px; color: white; display: flex; justify-content: space-between; align-items: center; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.25); flex-shrink: 0; }
+    .status-badge { font-size: 10px; padding: 4px 12px; border-radius: 20px; background: rgba(255,255,255,0.15); font-weight: 700; letter-spacing: 0.5px; }
+    .status-badge.unsent { background: var(--orange); color: white; animation: pulse 2s infinite; }
+    .status-badge.synced { background: var(--green); color: white; }
+    .status-badge.offline { background: #555; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    .content { flex: 1; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
+
+    .login-card { background: white; border-radius: 16px; margin: 24px auto; max-width: 400px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+    .login-card-header { background: linear-gradient(135deg, var(--navy) 0%, #2a4a7a 100%); padding: 32px 24px 24px; text-align: center; }
+    .b-pass-logo { font-size: 32px; font-weight: 900; color: white; letter-spacing: -1px; margin-bottom: 4px; }
+    .b-pass-logo span { color: var(--gold); }
+    .login-card-body { padding: 24px; }
+    input.pass-input { width: 100%; padding: 14px; font-size: 20px; text-align: center; border: 2px solid var(--border); border-radius: 10px; margin-bottom: 16px; outline: none; font-family: inherit; transition: border-color 0.2s; }
+    input.pass-input:focus { border-color: var(--navy); }
+
+    .camera-container { width: 100%; max-width: 300px; margin: 0 auto 20px; }
+    .camera-box { background: #000; width: 100%; aspect-ratio: 1 / 1; border-radius: 16px; overflow: hidden; position: relative; border: 3px solid var(--navy); box-shadow: 0 4px 16px rgba(26,44,78,0.3); }
+    canvas { width: 100%; height: 100%; object-fit: cover; }
+    .cam-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .cam-overlay::before { content: ''; position: absolute; top: 20%; left: 20%; width: 60%; height: 60%; border: 2px solid var(--gold); border-radius: 8px; animation: scanPulse 2s ease-in-out infinite; }
+    @keyframes scanPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.97); } }
+    .cam-label { position: absolute; bottom: 0; width: 100%; text-align: center; color: white; font-size: 11px; font-weight: 600; background: rgba(26,44,78,0.75); padding: 6px 0; letter-spacing: 0.5px; }
+
+    .search-box { position: sticky; top: -16px; background: var(--bg); padding: 10px 0; z-index: 5; }
+    .search-input { width: 100%; padding: 12px 16px; font-size: 15px; border: 2px solid var(--border); border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); outline: none; font-family: inherit; transition: border-color 0.2s; }
+    .search-input:focus { border-color: var(--navy); }
+
+    .member-list { display: flex; flex-direction: column; gap: 8px; padding-bottom: 120px; }
+    .member-card { background: white; padding: 14px 16px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #ddd; transition: transform 0.15s, box-shadow 0.15s; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+    .member-card:active { transform: scale(0.98); }
+    .m-name { font-weight: 700; font-size: 16px; }
+    .m-id { font-size: 11px; color: #aaa; margin-top: 3px; font-family: monospace; }
+    .m-status-icon { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #eee; display: flex; align-items: center; justify-content: center; color: transparent; font-weight: bold; flex-shrink: 0; }
+    .member-card.checked-in { background: #f8fdf9; border-left-color: var(--green); }
+    .member-card.checked-in .m-name { color: #555; }
+    .member-card.checked-in .m-status-icon { background: var(--green); border-color: var(--green); color: white; }
+    .member-card.pending { background: #fffbf0; border-left-color: var(--orange); }
+    .member-card.pending .m-status-icon { background: var(--orange); border-color: var(--orange); color: white; }
+
+    .footer { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 12px 16px; box-shadow: 0 -2px 12px rgba(0,0,0,0.08); display: flex; gap: 10px; }
+    .btn { flex: 1; padding: 14px; border: none; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; transition: opacity 0.2s; font-family: inherit; }
+    .btn:active { opacity: 0.8; }
+    .btn-primary { background: var(--navy); color: white; }
+    .btn-sync { background: var(--gold); color: white; display: none; }
+    .btn-exit { background: #eee; color: #666; }
+
+    #toast { position: fixed; top: -70px; left: 50%; transform: translateX(-50%); background: var(--navy); color: white; padding: 12px 28px; border-radius: 50px; font-size: 14px; font-weight: 700; transition: top 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 1000; box-shadow: 0 6px 20px rgba(0,0,0,0.25); text-align: center; min-width: 220px; white-space: nowrap; }
+    #toast.show { top: 24px; }
+    #toast.success { background: var(--green); }
+    #toast.error { background: var(--red); }
+
+    .modify-modal-wrap { position: fixed; inset: 0; z-index: 500; display: flex; flex-direction: column; justify-content: flex-end; }
+    .modify-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+    .modify-sheet { position: relative; background: white; border-radius: 20px 20px 0 0; padding: 28px 20px 36px; z-index: 1; }
+    .modify-handle { width: 40px; height: 4px; background: #ddd; border-radius: 2px; margin: 0 auto 20px; }
+    .modify-member-name { font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 4px; text-align: center; }
+    .modify-member-id { font-size: 12px; color: #aaa; text-align: center; font-family: monospace; margin-bottom: 6px; }
+    .modify-tag { display: inline-block; background: #e8f8ee; color: var(--green); font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-bottom: 24px; }
+    .modify-btn-cancel { width: 100%; padding: 15px; background: var(--red); color: white; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; margin-bottom: 10px; }
+    .modify-btn-cancel:active { opacity: 0.85; }
+    .modify-btn-close { width: 100%; padding: 14px; background: #f0f2f5; color: #555; border: none; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .modify-btn-close:active { opacity: 0.85; }
+  </style>
+</head>
+<body>
+
+  <div id="toast"></div>
+
+  <div id="modify-modal" class="modify-modal-wrap" style="display:none">
+    <div class="modify-overlay" onclick="closeModifyModal()"></div>
+    <div class="modify-sheet">
+      <div class="modify-handle"></div>
+      <div class="modify-member-name" id="modal-name"></div>
+      <div class="modify-member-id" id="modal-id"></div>
+      <div style="text-align:center"><span class="modify-tag">✅ 受付済み・送信完了</span></div>
+      <button class="modify-btn-cancel" onclick="executeCancelAttendance()">出席を取り消す</button>
+      <button class="modify-btn-close" onclick="closeModifyModal()">閉じる</button>
+    </div>
+  </div>
+
+  <!-- 1. ログイン画面 -->
+  <div id="view-login" class="content">
+    <div class="login-card">
+      <div class="login-card-header">
+        <div class="b-pass-logo">B-P<span>A</span>SS</div>
+        <div style="font-size:11px; color:rgba(255,255,255,0.6); margin-top:4px; letter-spacing:2px; font-weight:700;">STAFF CONSOLE</div>
+      </div>
+      <div class="login-card-body">
+        <p style="font-size:13px; color:#666; margin-bottom:20px; text-align:center;">
+          名簿をダウンロードします。<br>管理用パスコードを入力してください。
+        </p>
+        <input type="password" id="passcode" class="pass-input" placeholder="パスコードを入力">
+        <button class="btn btn-primary" style="width:100%" onclick="initApp()">システム起動</button>
+        <div id="offline-resume" style="margin-top:16px; display:none;">
+          <p style="font-size:11px; color:#FF9900; text-align:center; margin-bottom:8px;">保存済みの名簿データがあります</p>
+          <button class="btn btn-exit" style="width:100%" onclick="resumeOffline()">オフラインモードで再開</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. メイン画面 -->
+  <div id="view-main" style="display:none; flex-direction:column; height:100%;">
+    <div class="header">
+      <div id="header-title" style="font-weight:bold; font-size:14px;">名簿読込中</div>
+      <div id="status-badge" class="status-badge">同期済み</div>
+    </div>
+
+    <div class="content">
+      <div class="camera-container">
+        <div class="camera-box">
+          <canvas id="canvas"></canvas>
+          <div class="cam-overlay"></div>
+          <div class="cam-label">QRコードをスキャン</div>
+        </div>
+      </div>
+
+      <div class="search-box">
+        <input type="text" id="search-input" class="search-input" placeholder="🔍 名前またはIDで検索..." oninput="renderList()">
+      </div>
+      <div id="member-list" class="member-list"></div>
+    </div>
+
+    <div class="footer">
+      <button class="btn btn-sync" id="btn-sync" onclick="syncData()">未送信を送信</button>
+      <button class="btn btn-exit" onclick="resetUI()">終了</button>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // ★ GAS デプロイURL（clasp deploy 後に発行されるURLを貼り付けてください）
+    // ============================================================
+    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzfWKYfTuvxvst-nlrQpzm7s6-QGwXBuLEpB12nx2wtSQZe4F_49zn3P2WtmYlxgCi4Cg/exec';
+    // 例: 'https://script.google.com/macros/s/AKfycbxXXXXXXXXX/exec'
+    // ============================================================
+
+    let db = { date: "", list: [] };
+    let checkedIds = [];
+    let syncedIds  = [];
+    let modifyTargetId = null;
+    let currentPass = "";
+
+    let video = document.createElement("video");
+    let canvasElement = document.getElementById("canvas");
+    let canvas = canvasElement.getContext("2d");
+    let isProcessing = false;
+    let streamPtr = null;
+
+    window.onload = function() {
+      if (GAS_API_URL === 'YOUR_GAS_DEPLOY_URL_HERE') {
+        alert('⚠️ GAS_API_URL が未設定です。\nindex.html の GAS_API_URL を設定してください。');
+      }
+      if (localStorage.getItem("bpass_db")) {
+        document.getElementById("offline-resume").style.display = "block";
+      }
+      const savedSynced = localStorage.getItem("bpass_synced");
+      if (savedSynced) syncedIds = JSON.parse(savedSynced);
+    };
+
+    // --- API通信 ---
+    async function callApi(action, params = {}) {
+      const url = new URL(GAS_API_URL);
+      url.searchParams.set('action', action);
+      for (const [k, v] of Object.entries(params)) {
+        url.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+      }
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    // --- アプリ起動 ---
+    async function initApp() {
+      const pass = document.getElementById("passcode").value;
+      if (!pass) return showToast("パスコードを入力してください", "error");
+
+      const btn = document.querySelector("#view-login .btn-primary");
+      btn.disabled = true;
+      btn.innerText = "名簿を取得中...";
+
+      try {
+        const data = await callApi('masterData', { pass });
+        if (!data.success) throw new Error(data.message || '取得失敗');
+
+        db = { date: data.date, count: data.count, list: data.list };
+        currentPass = pass;
+        localStorage.setItem("bpass_db", JSON.stringify(db));
+
+        const savedQueue  = localStorage.getItem("bpass_queue");
+        const savedSynced = localStorage.getItem("bpass_synced");
+        if (savedQueue)  checkedIds = JSON.parse(savedQueue);
+        if (savedSynced) syncedIds  = JSON.parse(savedSynced);
+
+        setupMainView();
+        startCamera();
+        showToast("最新の名簿を同期しました", "success");
+
+      } catch (err) {
+        const localDb = localStorage.getItem("bpass_db");
+        if (localDb) {
+          db = JSON.parse(localDb);
+          currentPass = pass;
+          setupMainView();
+          startCamera();
+          showToast("オフラインモードで起動しました", "");
+        } else {
+          showToast(err.message || "通信エラー。初回はWi-Fi環境で起動してください。", "error");
+          btn.disabled = false;
+          btn.innerText = "システム起動";
+        }
+      }
+    }
+
+    function resumeOffline() {
+      const localDb = localStorage.getItem("bpass_db");
+      if (!localDb) return;
+      db = JSON.parse(localDb);
+      const savedQueue = localStorage.getItem("bpass_queue");
+      if (savedQueue) checkedIds = JSON.parse(savedQueue);
+      setupMainView();
+      startCamera();
+      showToast("保存データで再開しました", "");
+    }
+
+    function setupMainView() {
+      document.getElementById("view-login").style.display = "none";
+      document.getElementById("view-main").style.display = "flex";
+      document.getElementById("header-title").innerText = `${(db.date || '').slice(5)} (${db.count || db.list.length}名)`;
+      renderList();
+      updateSyncStatus();
+    }
+
+    // --- カメラ ---
+    function startCamera() {
+      const constraints = { video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } };
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(stream => {
+          streamPtr = stream;
+          video.srcObject = stream;
+          video.setAttribute("playsinline", true);
+          video.play();
+          requestAnimationFrame(tick);
+        })
+        .catch(e => showToast("カメラを起動できません: " + e.message, "error"));
+    }
+
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        const size = Math.min(video.videoWidth, video.videoHeight);
+        const sx = (video.videoWidth  - size) / 2;
+        const sy = (video.videoHeight - size) / 2;
+        canvasElement.width  = 400;
+        canvasElement.height = 400;
+        canvas.drawImage(video, sx, sy, size, size, 0, 0, 400, 400);
+
+        if (!isProcessing) {
+          const imageData = canvas.getImageData(0, 0, 400, 400);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+          if (code && code.data) {
+            isProcessing = true;
+            handleCheckIn(code.data);
+            setTimeout(() => { isProcessing = false; }, 2500);
+          }
+        }
+      }
+      if (streamPtr) requestAnimationFrame(tick);
+    }
+
+    // --- 受付処理 ---
+    function handleCheckIn(id) {
+      id = id.toUpperCase().trim();
+      const member = db.list.find(m => m.id === id);
+
+      if (!member) { showToast("名簿にありません", "error"); return; }
+
+      if (syncedIds.includes(id)) {
+        showModifyModal(id, member.name);
+        return;
+      }
+
+      if (checkedIds.includes(id)) {
+        checkedIds = checkedIds.filter(i => i !== id);
+        localStorage.setItem("bpass_queue", JSON.stringify(checkedIds));
+        renderList();
+        updateSyncStatus();
+        showToast(`↩ ${member.name} を取り消しました`, "");
+        return;
+      }
+
+      checkedIds.push(id);
+      localStorage.setItem("bpass_queue", JSON.stringify(checkedIds));
+      renderList();
+      updateSyncStatus();
+      showToast(`✅ ${member.name} 様`, "success");
+      document.getElementById("search-input").value = "";
+    }
+
+    // --- 修正モーダル ---
+    function showModifyModal(id, name) {
+      modifyTargetId = id;
+      document.getElementById("modal-name").innerText = name;
+      document.getElementById("modal-id").innerText   = id;
+      document.getElementById("modify-modal").style.display = "flex";
+    }
+
+    function closeModifyModal() {
+      document.getElementById("modify-modal").style.display = "none";
+      modifyTargetId = null;
+    }
+
+    async function executeCancelAttendance() {
+      const id     = modifyTargetId;
+      const member = db.list.find(m => m.id === id);
+      closeModifyModal();
+      showToast("取り消し中...", "");
+
+      try {
+        const res = await callApi('cancel', { pass: currentPass, ids: [id] });
+        if (res.success) {
+          syncedIds  = syncedIds.filter(i => i !== id);
+          checkedIds = checkedIds.filter(i => i !== id);
+          localStorage.setItem("bpass_synced", JSON.stringify(syncedIds));
+          localStorage.setItem("bpass_queue",  JSON.stringify(checkedIds));
+          renderList();
+          updateSyncStatus();
+          showToast(`↩ ${member ? member.name : id} の出席を取り消しました`, "");
+        } else {
+          showToast("取り消しに失敗しました", "error");
+        }
+      } catch (err) {
+        showToast("通信エラー。電波を確認してください。", "error");
+      }
+    }
+
+    // --- 一覧レンダリング ---
+    function renderList() {
+      const filter    = document.getElementById("search-input").value.toLowerCase();
+      const container = document.getElementById("member-list");
+      container.innerHTML = "";
+
+      db.list
+        .filter(m => m.name.toLowerCase().includes(filter) || m.id.toLowerCase().includes(filter))
+        .forEach(m => {
+          const isSynced  = syncedIds.includes(m.id);
+          const isPending = checkedIds.includes(m.id) && !isSynced;
+          const div = document.createElement("div");
+          div.className = `member-card${isSynced ? " checked-in" : isPending ? " pending" : ""}`;
+          div.onclick   = () => handleCheckIn(m.id);
+          div.innerHTML = `
+            <div class="m-info">
+              <div class="m-name">${m.name}</div>
+              <div class="m-id">${m.id}</div>
+            </div>
+            <div class="m-status-icon">${(isSynced || isPending) ? "✔" : ""}</div>
+          `;
+          container.appendChild(div);
+        });
+    }
+
+    function updateSyncStatus() {
+      const btn    = document.getElementById("btn-sync");
+      const badge  = document.getElementById("status-badge");
+      const pending = checkedIds.length;
+      const synced  = syncedIds.length;
+
+      if (pending > 0) {
+        btn.style.display = "block";
+        btn.innerText     = `送信 (${pending}件)`;
+        badge.innerText   = `未送信 ${pending}`;
+        badge.className   = "status-badge unsent";
+      } else if (synced > 0) {
+        btn.style.display = "none";
+        badge.innerText   = `送信済み ${synced}`;
+        badge.className   = "status-badge synced";
+      } else {
+        btn.style.display = "none";
+        badge.innerText   = "同期済み";
+        badge.className   = "status-badge";
+      }
+    }
+
+    // --- 一括送信 ---
+    async function syncData() {
+      if (!currentPass) {
+        const pass = prompt("送信確認のためパスコードを再入力してください");
+        if (!pass) return;
+        currentPass = pass;
+      }
+
+      const btn = document.getElementById("btn-sync");
+      btn.disabled = true;
+      btn.innerText = "送信中...";
+
+      try {
+        const res = await callApi('sync', { pass: currentPass, ids: checkedIds });
+        if (res.success) {
+          showToast(`送信完了: ${res.count}名`, "success");
+          syncedIds = [...new Set([...syncedIds, ...checkedIds])];
+          checkedIds = [];
+          localStorage.setItem("bpass_synced", JSON.stringify(syncedIds));
+          localStorage.removeItem("bpass_queue");
+          updateSyncStatus();
+          renderList();
+        } else {
+          showToast("認証エラー", "error");
+        }
+      } catch (err) {
+        showToast("送信失敗。電波の良い場所へ移動してください", "error");
+      }
+      btn.disabled = false;
+    }
+
+    // --- 終了 ---
+    function resetUI() {
+      if (checkedIds.length > 0) {
+        if (!confirm("未送信の受付データがあります。送信せずに終了しますか？")) return;
+      }
+      if (streamPtr) {
+        streamPtr.getTracks().forEach(t => t.stop());
+        streamPtr = null;
+      }
+      if (confirm("端末に保存された名簿データを消去して終了しますか？")) {
+        localStorage.removeItem("bpass_db");
+        localStorage.removeItem("bpass_queue");
+        localStorage.removeItem("bpass_synced");
+        checkedIds = [];
+        syncedIds  = [];
+      }
+      document.getElementById("view-main").style.display = "none";
+      document.getElementById("view-login").style.display = "block";
+      document.querySelector("#view-login .btn-primary").disabled = false;
+      document.querySelector("#view-login .btn-primary").innerText = "システム起動";
+    }
+
+    function showToast(msg, type) {
+      const el  = document.getElementById("toast");
+      el.innerText  = msg;
+      el.className  = type + " show";
+      setTimeout(() => { el.className = el.className.replace(" show", ""); }, 3000);
+    }
+  </script>
+</body>
+</html>
