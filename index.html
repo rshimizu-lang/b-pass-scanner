@@ -370,8 +370,8 @@
           div.className = `member-card${isSynced ? " checked-in" : isPending ? " pending" : ""}`;
           div.onclick   = () => handleCheckIn(m.id);
 
-          const photoOk = m.photo && (m.photo.includes('可') || m.photo.includes('同意'));
-          const photoNg = m.photo && (m.photo.includes('不可') || m.photo.includes('不同意') || m.photo.includes('NG'));
+          const photoOk = m.photo === '写真OK';
+          const photoNg = m.photo === '写真NG';
           const photoTag = photoOk
             ? `<span class="m-tag photo-ok">📷 可</span>`
             : photoNg
