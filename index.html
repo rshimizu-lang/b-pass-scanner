@@ -48,10 +48,14 @@
     .search-input:focus { border-color: var(--navy); }
 
     .member-list { display: flex; flex-direction: column; gap: 8px; padding-bottom: 120px; }
-    .member-card { background: white; padding: 14px 16px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #ddd; transition: transform 0.15s, box-shadow 0.15s; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+    .member-card { background: white; padding: 12px 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #ddd; transition: transform 0.15s, box-shadow 0.15s; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
     .member-card:active { transform: scale(0.98); }
     .m-name { font-weight: 700; font-size: 16px; }
-    .m-id { font-size: 11px; color: #aaa; margin-top: 3px; font-family: monospace; }
+    .m-id { font-size: 11px; color: #aaa; margin-top: 2px; font-family: monospace; }
+    .m-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+    .m-tag { font-size: 10px; padding: 2px 7px; border-radius: 10px; background: #f0f2f5; color: #555; font-weight: 600; }
+    .m-tag.photo-ok { background: #e8f8ee; color: #06C755; }
+    .m-tag.photo-ng { background: #fff0f0; color: #e63946; }
     .m-status-icon { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #eee; display: flex; align-items: center; justify-content: center; color: transparent; font-weight: bold; flex-shrink: 0; }
     .member-card.checked-in { background: #f8fdf9; border-left-color: var(--green); }
     .member-card.checked-in .m-name { color: #555; }
@@ -365,10 +369,25 @@
           const div = document.createElement("div");
           div.className = `member-card${isSynced ? " checked-in" : isPending ? " pending" : ""}`;
           div.onclick   = () => handleCheckIn(m.id);
+
+          const photoOk = m.photo && (m.photo.includes('可') || m.photo.includes('同意'));
+          const photoNg = m.photo && (m.photo.includes('不可') || m.photo.includes('不同意') || m.photo.includes('NG'));
+          const photoTag = photoOk
+            ? `<span class="m-tag photo-ok">📷 可</span>`
+            : photoNg
+              ? `<span class="m-tag photo-ng">📷 不可</span>`
+              : '';
+
           div.innerHTML = `
             <div class="m-info">
               <div class="m-name">${m.name}</div>
               <div class="m-id">${m.id}</div>
+              <div class="m-tags">
+                ${m.gender ? `<span class="m-tag">${m.gender}</span>` : ''}
+                ${m.age    ? `<span class="m-tag">${m.age}</span>`    : ''}
+                ${m.exp    ? `<span class="m-tag">${m.exp}</span>`    : ''}
+                ${photoTag}
+              </div>
             </div>
             <div class="m-status-icon">${(isSynced || isPending) ? "✔" : ""}</div>
           `;
