@@ -370,9 +370,9 @@
           div.className = `member-card${isSynced ? " checked-in" : isPending ? " pending" : ""}`;
           div.onclick   = () => handleCheckIn(m.id);
 
-          const photoNorm = m.photo.replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
-          const photoOk = photoNorm === '写真OK';
-          const photoNg = photoNorm === '写真NG';
+          const photo = m.photo.trim();
+          const photoOk = photo === '写真OK';
+          const photoNg = photo === '写真NG';
           const photoTag = photoOk
             ? `<span class="m-tag photo-ok">📷 可</span>`
             : photoNg
