@@ -201,15 +201,19 @@
       btn.disabled = true;
       btn.innerText = "名簿を取得中...";
 
-      // ★ ユーザージェスチャー内（await前）でカメラ権限を先取り
+      // ユーザージェスチャー内（await前）でカメラ権限を先取り
       // Android Chrome は await fetch() 後にジェスチャー文脈を失うため
       let preStream = null;
+      let cameraPermissionDenied = false;
       try {
         preStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
         });
       } catch(e) {
-        // 権限拒否 or 非対応端末 → startCamera()内でエラー表示
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+          cameraPermissionDenied = true;
+        }
+        // その他のエラーは startCamera() 側でエラー表示
       }
 
       try {
@@ -226,7 +230,7 @@
         if (savedSynced) syncedIds  = JSON.parse(savedSynced);
 
         setupMainView();
-        startCamera(preStream);
+        if (cameraPermissionDenied) { showCameraBlockedUI(); } else { startCamera(preStream); }
         showToast("最新の名簿を同期しました", "success");
 
       } catch (err) {
@@ -235,7 +239,7 @@
           db = JSON.parse(localDb);
           currentPass = pass;
           setupMainView();
-          startCamera(preStream);
+          if (cameraPermissionDenied) { showCameraBlockedUI(); } else { startCamera(preStream); }
           showToast("オフラインモードで起動しました", "");
         } else {
           if (preStream) preStream.getTracks().forEach(t => t.stop());
@@ -282,24 +286,32 @@
       const doStart = stream => {
         streamPtr = stream;
         video.srcObject = stream;
-        video.playsInline = true;                  // プロパティ形式（重要）
-        video.setAttribute("playsinline", "");     // 属性形式（iOS Safari 互換）
-        video.muted    = true;                     // Chrome Autoplay Policy 対応
+        video.playsInline = true;
+        video.setAttribute("playsinline", "");
+        video.muted    = true;
         video.autoplay = true;
 
-        // ★ Android Chrome はDOMに存在しないvideo要素のreadyStateを更新しない
+        // Android Chrome はDOMに存在しないvideo要素のreadyStateを更新しない
         if (!video.parentNode) {
           video.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
           document.body.appendChild(video);
         }
 
-        // play()成功後ではなく canplay イベントでtickを開始（より確実）
         video.oncanplay = () => {
           video.oncanplay = null;
           requestAnimationFrame(tick);
         };
 
-        video.play().catch(e => showToast("カメラを起動できません: " + e.message, "error"));
+        video.play().catch(e => showToast("カメラ再生エラー: " + e.message, "error"));
+      };
+
+      const onCameraError = e => {
+        // カメラ権限が拒否された場合（LINEアプリ内ブラウザ含む）
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+          showCameraBlockedUI();
+        } else {
+          showToast("カメラを起動できません: " + e.message, "error");
+        }
       };
 
       if (existingStream) {
@@ -307,7 +319,7 @@
       } else {
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } })
           .then(doStart)
-          .catch(e => showToast("カメラを起動できません: " + e.message, "error"));
+          .catch(onCameraError);
       }
     }
 
@@ -513,6 +525,28 @@
       document.getElementById("view-login").style.display = "block";
       document.querySelector("#view-login .btn-primary").disabled = false;
       document.querySelector("#view-login .btn-primary").innerText = "システム起動";
+    }
+
+    function showCameraBlockedUI() {
+      // カメラ権限が拒否されたときの案内UI
+      const existing = document.getElementById("cam-blocked-hint");
+      if (existing) return;
+
+      const hint = document.createElement("div");
+      hint.id = "cam-blocked-hint";
+      hint.style.cssText = "padding:16px 14px;font-size:13px;background:#fff0f0;border-radius:10px;margin-bottom:14px;line-height:1.9;border:1px solid #fcc;";
+      hint.innerHTML = `
+        <div style="font-weight:700;color:#e63946;margin-bottom:8px;">⚠️ カメラへのアクセスが拒否されています</div>
+        <div style="color:#444;">
+          <b>LINEアプリから開いている場合：</b><br>
+          右上の <b>「…」→「ブラウザで開く」</b> でChromeを起動してください。<br><br>
+          <b>Chromeで開いても拒否される場合：</b><br>
+          アドレスバー左の 🔒 → <b>「権限」→「カメラ」→「許可」</b><br>
+          に変更してページをリロードしてください。
+        </div>
+      `;
+      const camContainer = document.querySelector(".camera-container");
+      if (camContainer) camContainer.insertAdjacentElement("beforebegin", hint);
     }
 
     function showToast(msg, type) {
