@@ -201,6 +201,17 @@
       btn.disabled = true;
       btn.innerText = "名簿を取得中...";
 
+      // ★ ユーザージェスチャー内（await前）でカメラ権限を先取り
+      // Android Chrome は await fetch() 後にジェスチャー文脈を失うため
+      let preStream = null;
+      try {
+        preStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+      } catch(e) {
+        // 権限拒否 or 非対応端末 → startCamera()内でエラー表示
+      }
+
       try {
         const data = await callApi('masterData', { pass });
         if (!data.success) throw new Error(data.message || '取得失敗');
@@ -215,7 +226,7 @@
         if (savedSynced) syncedIds  = JSON.parse(savedSynced);
 
         setupMainView();
-        startCamera();
+        startCamera(preStream);
         showToast("最新の名簿を同期しました", "success");
 
       } catch (err) {
@@ -224,9 +235,10 @@
           db = JSON.parse(localDb);
           currentPass = pass;
           setupMainView();
-          startCamera();
+          startCamera(preStream);
           showToast("オフラインモードで起動しました", "");
         } else {
+          if (preStream) preStream.getTracks().forEach(t => t.stop());
           showToast(err.message || "通信エラー。初回はWi-Fi環境で起動してください。", "error");
           btn.disabled = false;
           btn.innerText = "システム起動";
@@ -254,17 +266,24 @@
     }
 
     // --- カメラ ---
-    function startCamera() {
-      const constraints = { video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } };
-      navigator.mediaDevices.getUserMedia(constraints)
-        .then(stream => {
-          streamPtr = stream;
-          video.srcObject = stream;
-          video.setAttribute("playsinline", true);
-          video.play();
-          requestAnimationFrame(tick);
-        })
-        .catch(e => showToast("カメラを起動できません: " + e.message, "error"));
+    function startCamera(existingStream) {
+      const doStart = stream => {
+        streamPtr = stream;
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        video.muted    = true;
+        video.autoplay = true;
+        video.play()
+          .then(() => requestAnimationFrame(tick))
+          .catch(e => showToast("カメラを起動できません: " + e.message, "error"));
+      };
+      if (existingStream) {
+        doStart(existingStream);
+      } else {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } })
+          .then(doStart)
+          .catch(e => showToast("カメラを起動できません: " + e.message, "error"));
+      }
     }
 
     function tick() {
