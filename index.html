@@ -267,16 +267,41 @@
 
     // --- カメラ ---
     function startCamera(existingStream) {
+      const ua = navigator.userAgent || '';
+
+      // LINE Android アプリ内ブラウザはカメラAPIが正常動作しない
+      if (/Line\//i.test(ua) && /Android/i.test(ua)) {
+        const hint = document.createElement("div");
+        hint.style.cssText = "text-align:center;padding:16px 12px;font-size:13px;color:#e63946;background:#fff0f0;border-radius:8px;margin-bottom:12px;line-height:1.8;";
+        hint.innerHTML = "⚠️ LINEアプリ内ブラウザではカメラが使えません。<br><strong>右上の「…」→「ブラウザで開く」</strong>でChromeを起動してください。";
+        const camContainer = document.querySelector(".camera-container");
+        if (camContainer) camContainer.insertAdjacentElement("beforebegin", hint);
+        return;
+      }
+
       const doStart = stream => {
         streamPtr = stream;
         video.srcObject = stream;
-        video.setAttribute("playsinline", true);
-        video.muted    = true;
+        video.playsInline = true;                  // プロパティ形式（重要）
+        video.setAttribute("playsinline", "");     // 属性形式（iOS Safari 互換）
+        video.muted    = true;                     // Chrome Autoplay Policy 対応
         video.autoplay = true;
-        video.play()
-          .then(() => requestAnimationFrame(tick))
-          .catch(e => showToast("カメラを起動できません: " + e.message, "error"));
+
+        // ★ Android Chrome はDOMに存在しないvideo要素のreadyStateを更新しない
+        if (!video.parentNode) {
+          video.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;";
+          document.body.appendChild(video);
+        }
+
+        // play()成功後ではなく canplay イベントでtickを開始（より確実）
+        video.oncanplay = () => {
+          video.oncanplay = null;
+          requestAnimationFrame(tick);
+        };
+
+        video.play().catch(e => showToast("カメラを起動できません: " + e.message, "error"));
       };
+
       if (existingStream) {
         doStart(existingStream);
       } else {
