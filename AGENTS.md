@@ -20,3 +20,8 @@ GitHub Pagesで公開され、参加者の出席登録に使用される。
 ## 関連
 B-PASS本体（bpass-parent / bpass-child-deploy。旧 BulldonPassportSystem は `_archive\B-PASS\bulldon-bpass` にアーカイブ・読み取り専用）と連携。
 詳細仕様は `../_shared/` を参照
+
+## 上位ルール
+
+ワークスペース `../.claude/rules/`（bulldon-workspace）を継承（commit-style / _meta-rules / brand-design）。
+GAS リポジトリではないため `gas-architecture.md` / `b-pass-design.md` は対象外。全体の正本は `../AGENTS.md`。
