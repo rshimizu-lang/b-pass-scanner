@@ -2,6 +2,11 @@
 
 > **層：運用層（operations）｜事実変化はAIが差分提示→承認後に更新可。**
 
+## Before editing（Codex等・非CCエージェント向け）
+
+- ブランド色・フォント・コピーの統治規則：`../.claude/rules/brand-design.md` を読む
+- publicリポ共通の禁止物：`../.claude/rules/public-repo-guard.md` を読む
+
 ## このリポジトリについて
 B-PASS用のQRスキャナー（静的ページ。技術詳細は下記「技術スタック」参照）。
 GitHub Pagesで公開され、参加者の出席登録に使用される。
